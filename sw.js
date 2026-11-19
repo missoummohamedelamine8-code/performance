@@ -1,7 +1,7 @@
 // Service worker — Performance
 // Incrémenter VERSION à chaque déploiement : l'app proposera la mise à jour.
 // Les données (IndexedDB) ne sont jamais touchées par les mises à jour.
-const VERSION = 'v1.2.0';
+const VERSION = 'v1.2.1';
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = 'runtime-v1';
 const ASSETS = [

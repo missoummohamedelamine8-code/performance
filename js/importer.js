@@ -21,7 +21,7 @@ export async function readWorkbook(file) {
   const name = file.name.toLowerCase();
   if (name.endsWith('.json')) {
     const j = JSON.parse(await file.text());
-    if (j.format === 'perf-sheet-grids') return { sheets: Object.fromEntries(Object.entries(j.sheets).map(([k, v]) => [k, v.values || v])), anchor: j.anchor || null };
+    if (j.format === 'perf-sheet-grids') return { sheets: Object.fromEntries(Object.entries(j.sheets).map(([k, v]) => [k, v.values || v])), anchor: j.anchor || null, renames: j.renames || null };
     if (j.values) return { sheets: { [String(j.range || 'Feuille').split('!')[0].replace(/'/g, '')]: j.values } };
     if (j.app === 'performance-muscu-nutrition') return { backup: j };
     throw new Error('JSON non reconnu.');
@@ -398,7 +398,7 @@ export function diffImport(st) {
   const d = { newSessions: 0, updatedSessions: 0, sameSessions: 0, conflicts: 0, newExercises: 0, newTemplates: 0, newDays: 0, updatedDays: 0, sets: 0 };
   const byKey = new Map(S.sessions.filter(s => s.key).map(s => [s.key, s]));
   const exByKey = new Map(S.exercises.map(e => [e.key || exKey(e.name), e]));
-  for (const e of st.exercises || []) if (!exByKey.has(e.key)) d.newExercises++;
+  for (const e of st.exercises || []) { if (exByKey.has(e.key)) continue; if (e.renamedFrom && exByKey.has(e.renamedFrom)) d.renamedExercises = (d.renamedExercises || 0) + 1; else d.newExercises++; }
   for (const t of st.templates || []) if (!S.templates.some(x => x.key === t.key)) d.newTemplates++;
   for (const s of st.sessions || []) {
     d.sets += s.sets.length;
@@ -424,6 +424,14 @@ export async function commitImport(st) {
   if (st.sessions?.some(s => !s.date)) throw new Error('Certaines séances n’ont pas de date : indique la date de référence avant de valider.');
   const exByKey = new Map(S.exercises.map(e => [e.key || exKey(e.name), e]));
   const newEx = [];
+  // exercice renommé (ex. « Exercice 6 sans nom » -> vrai nom) : on renomme l'existant, son historique est conservé
+  for (const e of st.exercises || []) {
+    if (e.renamedFrom && !exByKey.has(e.key) && exByKey.has(e.renamedFrom)) {
+      const old = exByKey.get(e.renamedFrom);
+      Object.assign(old, { name: e.name, key: e.key, unnamed: false }); if (old.group === 'Autre' && e.group) old.group = e.group;
+      exByKey.set(e.key, old); newEx.push(old);
+    }
+  }
   for (const e of st.exercises || []) {
     const cur = exByKey.get(e.key);
     if (!cur) { const ne = Object.assign({ id: uid('ex_'), createdAt: Date.now() }, e); newEx.push(ne); exByKey.set(e.key, ne); }
@@ -538,6 +546,16 @@ export function analyseWorkbook(wb, opts = {}) {
   for (const n of det.long) { const t = parseLongGrid(wb.sheets[n]); res.exercises.push(...t.exercises); res.sessions.push(...t.sessions); }
   if (!det.training.length && !det.tracking.length && !det.long.length) res.warnings.push('Aucune feuille reconnue (TRAINING, TRACKING ou tableau « date / exercice / reps / poids »).');
   // dédoublonnage des exercices détectés dans plusieurs feuilles
+  // renommages (ex. un exercice sans nom dans le Sheets) : l'exercice déjà importé garde son historique
+  if (wb.renames) for (const e of res.exercises) {
+    const nn = wb.renames[e.name]; if (!nn) continue;
+    const oldKey = e.key, newKey = exKey(nn);
+    Object.assign(e, { name: nn, key: newKey, renamedFrom: oldKey, unnamed: false });
+    if (e.group === 'Autre') e.group = muscleGroup(nn) || 'Autre';
+    for (const s of res.sessions) for (const x of s.sets) if (x.exKey === oldKey) x.exKey = newKey;
+    for (const t of res.templates) for (const x of t.exercises) if (x.exKey === oldKey) x.exKey = newKey;
+    res.warnings = res.warnings.filter(w => !w.includes(oldKey) && !w.includes('« ' + Object.keys(wb.renames).find(k => wb.renames[k] === nn) + ' »'));
+  }
   const seen = new Map(); for (const e of res.exercises) if (!seen.has(e.key)) seen.set(e.key, e); res.exercises = [...seen.values()];
   return res;
 }
