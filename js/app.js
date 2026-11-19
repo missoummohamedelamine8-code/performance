@@ -13,6 +13,18 @@ import './views-activity.js';
 import './views-nutrition.js';
 import './views-progress.js';
 import { autoSnapshot } from './views-profile.js';
+import { captureKeyFromHash, autoSync } from './sync.js';
+
+let syncing = false;
+async function runSync(first) {
+  if (syncing || !S.syncKey) return; syncing = true;
+  try {
+    const r = await autoSync();
+    if (r && r.applied) { const d = r.diff || {}; toast(`Google Sheets synchronisé : ${(d.newSessions || 0) + (d.updatedSessions || 0)} séance(s) mise(s) à jour`, 4000); render(); }
+    else if (first && r && !r.error) toast('Synchronisation activée : tes données sont à jour');
+    else if (first && r && r.error) toast('Synchronisation : ' + r.error, 5000);
+  } catch (e) { console.warn('sync', e); } finally { syncing = false; }
+}
 
 const TABS = [
   ['home', 'Accueil', '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'],
@@ -62,15 +74,17 @@ async function init() {
   try { await loadAll(); }
   catch (e) { document.getElementById('main').innerHTML = `<div class="card"><h3>Stockage indisponible</h3><p>${e.message}. En navigation privée, le stockage local peut être bloqué.</p></div>`; return; }
   await import('./views-profile.js');
+  const keyAdded = await captureKeyFromHash();
   fromHash(); render();
   window.addEventListener('hashchange', () => { fromHash(); render(); });
   requestPersist();
   const last = S.settings.lastAutoSnapshot;
   if (!last || Date.now() - last > 86400000) autoSnapshot('quotidienne');
   maybeCalibrate();
+  runSync(keyAdded);
   // re-rendu à minuit / au retour sur l'app (date du jour)
   let day = todayStr();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && todayStr() !== day) { day = todayStr(); R.date = day; render(); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) return; runSync(false); if (todayStr() !== day) { day = todayStr(); R.date = day; render(); } });
 }
 
 // ------------------------------ Service worker ------------------------

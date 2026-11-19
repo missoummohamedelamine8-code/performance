@@ -1,14 +1,14 @@
 // Service worker — Performance
 // Incrémenter VERSION à chaque déploiement : l'app proposera la mise à jour.
 // Les données (IndexedDB) ne sont jamais touchées par les mises à jour.
-const VERSION = 'v1.2.1';
+const VERSION = 'v1.3.0';
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = 'runtime-v1';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/core.js', 'js/calc.js', 'js/nav.js', 'js/ui.js', 'js/charts.js', 'js/importer.js', 'js/foods.js',
   'js/views-home.js', 'js/views-train.js', 'js/views-workout.js', 'js/views-run.js', 'js/views-activity.js',
-  'js/views-nutrition.js', 'js/views-progress.js', 'js/views-profile.js',
+  'js/views-nutrition.js', 'js/views-progress.js', 'js/views-profile.js', 'js/sync.js',
   'data/ciqual.json', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
 ];
 const CDN = ['cdn.jsdelivr.net', 'unpkg.com'];
@@ -33,6 +33,8 @@ self.addEventListener('fetch', e => {
   // Photos de produits Open Food Facts : cache, sans bloquer
   if (url.hostname.endsWith('openfoodfacts.org') && /\.(jpg|png|webp)$/.test(url.pathname)) { e.respondWith(cacheFirst(req, RUNTIME)); return; }
   if (url.origin !== location.origin) return; // API : réseau uniquement
+  // données synchronisées : toujours la version publiée la plus récente
+  if (url.pathname.endsWith('/data/sync.enc')) { e.respondWith(fetch(req, { cache: 'no-store' }).catch(() => caches.match(req, { ignoreSearch: true }))); return; }
   // Application : cache d'abord (hors ligne), navigation -> index.html
   if (req.mode === 'navigate') { e.respondWith(caches.match('index.html', { ignoreSearch: true }).then(r => r || fetch(req))); return; }
   e.respondWith(caches.match(req, { ignoreSearch: true }).then(r => r || fetch(req).then(res => { if (res.ok) caches.open(RUNTIME).then(c => c.put(req, res.clone())); return res; })));

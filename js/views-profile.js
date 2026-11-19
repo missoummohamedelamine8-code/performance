@@ -7,7 +7,7 @@ import * as I from './importer.js';
 import { R, VIEWS, rerender, go } from './nav.js';
 import { actions, openSheet, toast, card, kpi, badge, seg, field, inp, sel, formData, confirmDlg, closeAllSheets } from './ui.js';
 
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.3.0';
 
 VIEWS.profil = () => {
   const p = S.profile;
@@ -28,6 +28,8 @@ VIEWS.profil = () => {
   const pending = S.staging.filter(s => s.status === 'pending'), done = S.staging.filter(s => s.status === 'committed');
   o += card(`<h3>Google Sheets & imports</h3>
     <p class="small">Exporte ton Google Sheets (Fichier › Télécharger › Microsoft Excel .xlsx) puis importe-le ici. Les feuilles <b>TRAINING</b> (séances) et <b>TRACKING</b> (poids, pas) sont reconnues automatiquement. Les données restent <b>en attente</b> jusqu'à ta validation, et une réimportation ne crée pas de doublons.</p>
+    ${S.syncKey ? `<div class="note small"><b>Synchronisation automatique activée.</b> À chaque ouverture, la dernière version publiée de ton Google Sheets est intégrée toute seule.${S.syncInfo ? ` Dernière mise à jour : extraction du ${new Date(S.syncInfo.extraitLe || S.syncInfo.rev).toLocaleString('fr-FR')}, intégrée le ${new Date(S.syncInfo.at).toLocaleString('fr-FR')}.` : ''}
+      <button class="link small" data-a="syncNow">Synchroniser maintenant</button></div>` : ''}
     <button class="btn w100" data-a="openImport">Importer un fichier (.xlsx, .csv, .json)</button>
     ${pending.map(s => `<button class="banner mt-s" data-a="openStaging" data-id="${s.id}">En attente : ${esc(s.fileName || s.source)} — ${s.diff.newSessions} nouvelles séances</button>`).join('')}
     ${done.length ? `<details class="mt-s"><summary class="small">Imports validés (${done.length})</summary>${done.map(s => `<div class="hist-row small"><span>${fdate(dstr(new Date(s.committedAt)))} · ${esc(s.fileName || s.source)}</span><span>${s.result?.sessions || 0} séances<button class="link small" data-a="rollback" data-id="${s.id}">annuler</button></span></div>`).join('')}</details>` : ''}
@@ -175,6 +177,11 @@ function restoreDialog(b) {
 
 actions({
   openImport() { importSheet(); },
+  async syncNow() {
+    const { autoSync } = await import('./sync.js');
+    const r = await autoSync({ force: true });
+    toast(!r ? 'Synchronisation non activée' : r.error ? 'Synchronisation : ' + r.error : 'Données du Google Sheets intégrées', 4000); rerender();
+  },
   async redate() {
     const f = formData(document.getElementById('redateForm')); const w = num(f.week);
     if (!w || !f.date) { toast('Indique la semaine et la date du lundi'); return; }

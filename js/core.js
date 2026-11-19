@@ -101,6 +101,7 @@ export async function loadAll() {
   S.calib = k.calib || { factor: 1, updatedAt: null, history: [] };
   S.active = k.activeWorkout || null;
   S.stepGoals = k.stepGoals || [];
+  S.syncKey = k.syncKey || null; S.syncApplied = k.syncApplied || null; S.syncInfo = k.syncInfo || null;
   S.sessions.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   S.runs.sort((a, b) => a.date < b.date ? -1 : 1);
 }
@@ -144,6 +145,7 @@ export async function kvSet(key, value) {
   else if (key === 'calib') S.calib = value;
   else if (key === 'activeWorkout') S.active = value;
   else if (key === 'stepGoals') S.stepGoals = value;
+  else S[key] = value;
 }
 
 export async function getAllRaw(store) { const db = await openDB(); return reqP(db.transaction(store).objectStore(store).getAll()); }

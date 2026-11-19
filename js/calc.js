@@ -231,7 +231,7 @@ export function weightAlerts() {
 // ---------------------------------------------------------------------
 export const GROUPS = ['Pectoraux', 'Dos', 'Épaules', 'Biceps', 'Triceps', 'Quadriceps', 'Ischio-jambiers', 'Fessiers', 'Adducteurs', 'Mollets', 'Abdominaux'];
 const MUSCLE_MAP = [
-  [/abdo|gainage|core|oblique/, 'Abdominaux'], [/pec/, 'Pectoraux'], [/dorsal|dos|trap|lomb/, 'Dos'], [/delto|epaule/, 'Épaules'], [/bicep/, 'Biceps'], [/tricep/, 'Triceps'],
+  [/abdo|gainage|core|oblique/, 'Abdominaux'], [/tricep/, 'Triceps'], [/bicep/, 'Biceps'], [/pector|\bpecs?\b/, 'Pectoraux'], [/dorsal|dos|trap|lomb/, 'Dos'], [/delto|epaule/, 'Épaules'], [/bicep/, 'Biceps'], [/tricep/, 'Triceps'],
   [/quad/, 'Quadriceps'], [/ischio/, 'Ischio-jambiers'], [/fess|glut/, 'Fessiers'], [/adduct/, 'Adducteurs'], [/mollet|calf/, 'Mollets'], [/abdo|gainage|core/, 'Abdominaux']
 ];
 export function muscleGroup(m) { const n = norm(m); for (const [re, g] of MUSCLE_MAP) if (re.test(n)) return g; return m ? 'Autre' : null; }

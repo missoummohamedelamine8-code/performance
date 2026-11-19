@@ -228,7 +228,7 @@ export function parseTrainingGrid(grid, opts = {}) {
       let ex = exercises.get(k);
       if (!ex) {
         ex = {
-          key: k, name: e.name, muscle: e.m[0] || '', group: muscleGroup(e.m[0]) || 'Autre', secondary: e.m.slice(1),
+          key: k, name: e.name, muscle: e.m[0] || '', group: muscleGroup(e.m[0]) || (!e.unnamed && muscleGroup(e.name) !== 'Autre' && muscleGroup(e.name)) || 'Autre', secondary: e.m.slice(1),
           movement: guessMovement(e.name, e.m), equipment: guessEquipment(e.name), rest: e.rest || null,
           link: /^https?:/.test(e.link) ? e.link : '', linkLabel: /^https?:/.test(e.link) ? '' : e.link,
           note: e.note, setting: e.setting, source: 'sheet', unnamed: e.unnamed, inferredFields: ['movement', 'equipment']
@@ -428,7 +428,7 @@ export async function commitImport(st) {
   for (const e of st.exercises || []) {
     if (e.renamedFrom && !exByKey.has(e.key) && exByKey.has(e.renamedFrom)) {
       const old = exByKey.get(e.renamedFrom);
-      Object.assign(old, { name: e.name, key: e.key, unnamed: false }); if (old.group === 'Autre' && e.group) old.group = e.group;
+      const wasUnnamed = old.unnamed; Object.assign(old, { name: e.name, key: e.key, unnamed: false }); if ((wasUnnamed || old.group === 'Autre') && e.group && e.group !== 'Autre') old.group = e.group;
       exByKey.set(e.key, old); newEx.push(old);
     }
   }
@@ -548,7 +548,10 @@ export function analyseWorkbook(wb, opts = {}) {
   // dédoublonnage des exercices détectés dans plusieurs feuilles
   // renommages (ex. un exercice sans nom dans le Sheets) : l'exercice déjà importé garde son historique
   if (wb.renames) for (const e of res.exercises) {
-    const nn = wb.renames[e.name]; if (!nn) continue;
+    // ancien nom -> nouveau ; aussi quand le Sheets contient déjà le nouveau nom (l'exercice importé avant garde son historique)
+    const pair = Object.entries(wb.renames).find(([o, n]) => o === e.name || n === e.name); if (!pair) continue;
+    if (e.name === pair[1]) { e.renamedFrom = exKey(pair[0]); continue; }
+    const nn = pair[1];
     const oldKey = e.key, newKey = exKey(nn);
     Object.assign(e, { name: nn, key: newKey, renamedFrom: oldKey, unnamed: false });
     if (e.group === 'Autre') e.group = muscleGroup(nn) || 'Autre';
