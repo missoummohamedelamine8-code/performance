@@ -189,7 +189,7 @@ actions({
       const sets = [];
       A.items.forEach(it => it.sets.forEach((x, si) => { if (x.r != null && (x.done || x.w != null)) sets.push({ exId: it.exId, setIdx: si + 1, r: x.r, w: x.w, range: it.ranges[si] || null, replacedFrom: it.replacedFrom }); }));
       if (!sets.length && !await confirmDlg('Aucune série complète : enregistrer quand même ?')) return;
-      const ses = { id: A.id, templateId: A.templateId, name: A.name, date: f.date || A.date, sets, rpe: num(f.rpe), difficulty: num(f.difficulty), fatigueAfter: num(f.fatigueAfter), durationMin: num(f.durationMin) || mins, notes: f.notes, source: 'app', status: 'done', createdAt: Date.now() };
+      const ses = { id: A.id, templateId: A.templateId, name: A.name, date: f.date || A.date, week: C.programWeek(f.date || A.date), sets, rpe: num(f.rpe), difficulty: num(f.difficulty), fatigueAfter: num(f.fatigueAfter), durationMin: num(f.durationMin) || mins, notes: f.notes, source: 'app', status: 'done', createdAt: Date.now() };
       await put('sessions', ses);
       await kvSet('activeWorkout', null);
       s.close(); close(); toast('Séance enregistrée 💪');

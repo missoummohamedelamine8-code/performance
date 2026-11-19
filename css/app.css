@@ -249,3 +249,9 @@ ol, ul { padding-left: 20px; }
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 @media (max-width: 360px) { .grid3 { grid-template-columns: 1fr 1fr; } #nav button span { font-size: 9.5px; } .wset { grid-template-columns: 22px 44px 1fr 1fr 46px; gap: 6px; } }
+
+/* historique par semaine */
+.card.week h3 { margin: 0; }
+.card.week .list-i { margin: 8px 0 0; }
+.wk-todo { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; margin: 8px 0 0; border: 1px dashed var(--line); border-radius: var(--r-s); font-size: 14px; color: var(--muted); }
+.wk-todo.todo { color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }

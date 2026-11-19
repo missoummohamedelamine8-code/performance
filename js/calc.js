@@ -414,6 +414,17 @@ export function recentPRs(days = 30) {
   return Object.values(uniq).sort((a, b) => a.date < b.date ? 1 : -1);
 }
 
+/**
+ * Numéro de semaine du programme pour une date, dans la continuité du Sheets
+ * (« Semaine 15 », puis 16, 17… pour les séances enregistrées dans l'app).
+ */
+export function programWeek(date) {
+  const ref = S.sessions.filter(s => s.source === 'sheet' && s.week != null).reduce((a, b) => (!a || b.week > a.week) ? b : a, null);
+  if (ref) return ref.week + Math.round(dayDiff(mondayOf(ref.date), mondayOf(date)) / 7);
+  const first = doneSessions()[0];
+  return first ? 1 + Math.round(dayDiff(mondayOf(first.date), mondayOf(date)) / 7) : null;
+}
+
 /** Prochaine séance suggérée selon le jour habituel puis la rotation observée. */
 export function nextTemplate(date = todayStr()) {
   const tpls = S.templates.filter(t => !t.archived && t.exercises?.length);

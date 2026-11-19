@@ -137,15 +137,50 @@ function renderHistory() {
     h += `<div class="note small">Dates des séances du Sheets estimées à partir des numéros de semaine (semaine ${last.week} = semaine du ${fdate(mondayOf(last.date))}).
       <button class="link small" data-a="redateQuick">Corriger les dates</button></div>`;
   }
-  for (const s of list.slice(0, 200)) {
-    const m = s.date.slice(0, 7);
-    if (m !== curM) { curM = m; h += `<h4 class="month">${new Date(s.date + 'T12:00').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</h4>`; }
-    const ton = C.sessionTonnage(s);
-    h += `<button class="list-i" data-a="openSession" data-id="${s.id}"><div class="row between"><b>${esc(s.name)}</b><span>${f0(ton)} kg</span></div>
-      <small>${fdate(s.date, true)}${s.dateApprox ? ' (date estimée)' : ''} · ${C.sessionSetsCount(s)} séries${s.rpe ? ' · RPE ' + s.rpe : ''} · ${s.source === 'sheet' ? 'Google Sheets' : s.source === 'csv' ? 'CSV' : 'App'}</small></button>`;
+  // Une carte par semaine, comme les colonnes « Semaine N » du Sheets :
+  // les séances prévues dans ton organisation, faites ou non, + les séances hors programme.
+  const today = todayStr(), thisMon = mondayOf(today);
+  const firstMon = mondayOf(list[list.length - 1].date);
+  const tpls = S.templates.filter(t => !t.archived && t.exercises?.length).sort((a, b) => ((a.day ?? 9) + 6) % 7 - ((b.day ?? 9) + 6) % 7);
+  const maxWeeks = R.filters.histWeeks || 12;
+  const weeks = []; for (let m = thisMon; m >= firstMon; m = addDays(m, -7)) weeks.push(m);
+  const fmtRange = m => { const a = new Date(m + 'T12:00'), b = new Date(addDays(m, 6) + 'T12:00'); const o = { day: 'numeric', month: 'short' }; return `${a.toLocaleDateString('fr-FR', a.getMonth() === b.getMonth() ? { day: 'numeric' } : o)} – ${b.toLocaleDateString('fr-FR', Object.assign({ year: 'numeric' }, o))}`; };
+  let empty = 0;
+  const flushEmpty = () => { if (empty) { h += `<p class="muted small center">${empty} semaine${empty > 1 ? 's' : ''} sans séance</p>`; empty = 0; } };
+  let shown = 0;
+  for (const mon of weeks) {
+    const end = addDays(mon, 6);
+    const ss = list.filter(s => s.date >= mon && s.date <= end).sort((a, b) => a.date < b.date ? -1 : 1);
+    if (!ss.length && mon !== thisMon) { empty++; continue; }
+    if (shown >= maxWeeks) break;
+    flushEmpty(); shown++;
+    const wk = C.programWeek(mon);
+    const used = new Set();
+    let rows = '';
+    for (const t of tpls) {
+      const done = ss.filter(s => s.templateId === t.id);
+      done.forEach(s => used.add(s.id));
+      if (done.length) rows += done.map(s => sessionRow(s, true)).join('');
+      else {
+        const due = t.day != null ? addDays(mon, (t.day + 6) % 7) : null;
+        const future = mon === thisMon && (!due || due >= today);
+        rows += `<div class="wk-todo ${future ? 'todo' : ''}"><span>○ ${esc(t.name)}<small class="muted"> · ${due ? fdate(due, true) : 'jour libre'}</small></span>
+          ${future ? `<button class="btn small" data-a="startTpl" data-id="${t.id}">${due === today ? 'Démarrer' : 'À faire'}</button>` : '<small class="muted">non faite</small>'}</div>`;
+      }
+    }
+    for (const s of ss.filter(s => !used.has(s.id))) rows += sessionRow(s, false);
+    const doneCount = ss.filter(s => tpls.some(t => t.id === s.templateId)).length;
+    const ton = sum(ss.map(C.sessionTonnage));
+    h += `<section class="card week ${mon === thisMon ? 'accent-l' : ''}"><div class="row between"><h3>${wk != null && wk > 0 ? 'Semaine ' + wk : 'Semaine'}${mon === thisMon ? ' · en cours' : ''}</h3><small class="muted">${fmtRange(mon)}</small></div>
+      <small class="muted d-block">${doneCount}/${tpls.length} séances du programme${ss.length > doneCount ? ` + ${ss.length - doneCount} autre(s)` : ''} · ${f0(ton)} kg · ${sum(ss.map(C.sessionSetsCount))} séries</small>${rows}</section>`;
   }
-  if (list.length > 200) h += `<p class="muted small">… ${list.length - 200} séances plus anciennes (voir Progrès).</p>`;
+  flushEmpty();
+  if (weeks.length && shown >= maxWeeks) h += `<button class="btn ghost w100" data-a="histMore">Afficher les semaines précédentes</button>`;
   return h;
+}
+function sessionRow(s, planned) {
+  return `<button class="list-i" data-a="openSession" data-id="${s.id}"><div class="row between"><b>${planned ? '✓ ' : ''}${esc(s.name)}</b><span>${f0(C.sessionTonnage(s))} kg</span></div>
+    <small>${fdate(s.date, true)}${s.dateApprox ? ' (date estimée)' : ''} · ${C.sessionSetsCount(s)} séries${s.rpe ? ' · RPE ' + s.rpe : ''} · ${s.source === 'sheet' ? 'Google Sheets' : s.source === 'csv' ? 'CSV' : 'App'}${planned ? '' : ' · hors programme'}</small></button>`;
 }
 
 function sessionDetail(s) {
@@ -170,6 +205,7 @@ function sessionDetail(s) {
 }
 let sesSheet = null;
 actions({
+  histMore() { R.filters.histWeeks = (R.filters.histWeeks || 12) + 12; rerender(); },
   redateQuick() {
     const sheet = S.sessions.filter(s => s.source === 'sheet' && s.week != null);
     const last = sheet.reduce((a, b) => b.week > a.week || (b.week === a.week && b.date > a.date) ? b : a);
