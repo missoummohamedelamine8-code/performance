@@ -87,8 +87,8 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       });
     });
   }).catch(e => console.warn('SW', e));
-  let reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+  let reloaded = false; const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
 }
 
 init();
