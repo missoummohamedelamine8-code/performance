@@ -131,6 +131,12 @@ function renderHistory() {
   const list = [...S.sessions].reverse();
   if (!list.length) return card('<p class="muted">Aucune séance enregistrée.</p>');
   let h = '', curM = '';
+  const sheet = list.filter(s => s.source === 'sheet' && s.week != null && s.dateApprox !== false);
+  if (sheet.length) {
+    const last = sheet.reduce((a, b) => b.week > a.week || (b.week === a.week && b.date > a.date) ? b : a);
+    h += `<div class="note small">Dates des séances du Sheets estimées à partir des numéros de semaine (semaine ${last.week} = semaine du ${fdate(mondayOf(last.date))}).
+      <button class="link small" data-a="redateQuick">Corriger les dates</button></div>`;
+  }
   for (const s of list.slice(0, 200)) {
     const m = s.date.slice(0, 7);
     if (m !== curM) { curM = m; h += `<h4 class="month">${new Date(s.date + 'T12:00').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</h4>`; }
@@ -164,6 +170,26 @@ function sessionDetail(s) {
 }
 let sesSheet = null;
 actions({
+  redateQuick() {
+    const sheet = S.sessions.filter(s => s.source === 'sheet' && s.week != null);
+    const last = sheet.reduce((a, b) => b.week > a.week || (b.week === a.week && b.date > a.date) ? b : a);
+    const lastSes = sheet.filter(s => s.week === last.week).sort((a, b) => a.date < b.date ? 1 : -1)[0];
+    const s = openSheet({
+      title: 'Corriger les dates', body: `<p class="small">Indique la date réelle de ta séance la plus récente du Sheets : <b>${esc(lastSes.name)}</b> (semaine ${last.week}, actuellement le ${fdate(lastSes.date, true)}). Toutes les séances importées sont décalées d'autant, chacune à son jour habituel.</p>
+      ${field('Date réelle de cette séance', `<input type="date" name="d" value="${lastSes.date}">`)}
+      <button class="btn w100" data-ok>Recaler toutes les dates</button>
+      <p class="muted small">Les séances dont tu as modifié la date à la main ne bougent pas. Une copie de sécurité est faite avant.</p>`
+    });
+    s.body.querySelector('[data-ok]').onclick = async () => {
+      const d = s.body.querySelector('[name=d]').value; if (!d) return;
+      const { redateSheetSessions } = await import('./importer.js');
+      const { autoSnapshot } = await import('./views-profile.js');
+      await autoSnapshot('avant recalage des dates');
+      // même décalage pour tout le monde : lundi de la semaine visée = lundi de la date indiquée
+      const n = await redateSheetSessions(last.week, mondayOf(d));
+      s.close(); toast(`${n} séance(s) redatée(s)`); rerender();
+    };
+  },
   openSession(el) { const s = S.sessions.find(x => x.id === el.dataset.id); sesSheet = openSheet({ title: s.name, body: sessionDetail(s), full: true }); },
   async saveSession(el) {
     const s = S.sessions.find(x => x.id === el.dataset.id); const f = formData(sesSheet.body);

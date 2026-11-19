@@ -1,7 +1,7 @@
 // Service worker — Performance
 // Incrémenter VERSION à chaque déploiement : l'app proposera la mise à jour.
 // Les données (IndexedDB) ne sont jamais touchées par les mises à jour.
-const VERSION = 'v1.0.2';
+const VERSION = 'v1.0.3';
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = 'runtime-v1';
 const ASSETS = [
@@ -14,7 +14,8 @@ const ASSETS = [
 const CDN = ['cdn.jsdelivr.net', 'unpkg.com'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS)));
+  // s'active tout de suite, sans attendre la fermeture des onglets
+  e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS.map(a => new Request(a, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {

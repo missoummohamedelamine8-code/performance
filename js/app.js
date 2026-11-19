@@ -75,17 +75,16 @@ async function init() {
 
 // ------------------------------ Service worker ------------------------
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js').then(reg => {
+  // Mise à jour automatique : une nouvelle version s'installe et s'active d'elle-même,
+  // puis la page se recharge une fois (les données, dans IndexedDB, ne sont pas touchées).
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    if (reg.waiting) reg.waiting.postMessage('skipWaiting');
     reg.addEventListener('updatefound', () => {
       const nw = reg.installing;
-      nw && nw.addEventListener('statechange', () => {
-        if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-          const b = document.createElement('button'); b.className = 'banner update'; b.textContent = 'Nouvelle version disponible — toucher pour mettre à jour (tes données sont conservées)';
-          b.onclick = () => { nw.postMessage('skipWaiting'); };
-          document.getElementById('main').prepend(b);
-        }
-      });
+      nw && nw.addEventListener('statechange', () => { if (nw.state === 'installed' && reg.waiting) reg.waiting.postMessage('skipWaiting'); });
     });
+    reg.update().catch(() => { });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => { }); });
   }).catch(e => console.warn('SW', e));
   let reloaded = false; const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
