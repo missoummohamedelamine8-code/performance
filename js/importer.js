@@ -21,7 +21,7 @@ export async function readWorkbook(file) {
   const name = file.name.toLowerCase();
   if (name.endsWith('.json')) {
     const j = JSON.parse(await file.text());
-    if (j.format === 'perf-sheet-grids') return { sheets: Object.fromEntries(Object.entries(j.sheets).map(([k, v]) => [k, v.values || v])) };
+    if (j.format === 'perf-sheet-grids') return { sheets: Object.fromEntries(Object.entries(j.sheets).map(([k, v]) => [k, v.values || v])), anchor: j.anchor || null };
     if (j.values) return { sheets: { [String(j.range || 'Feuille').split('!')[0].replace(/'/g, '')]: j.values } };
     if (j.app === 'performance-muscu-nutrition') return { backup: j };
     throw new Error('JSON non reconnu.');
@@ -472,6 +472,24 @@ export async function commitImport(st) {
 
 export async function discardImport(id) { await del('staging', id); }
 
+/**
+ * Recale les dates des séances déjà importées du Sheets à partir d'un nouveau repère
+ * (semaine n° = lundi). Le jour de chaque séance reste son jour habituel.
+ * Les séances dont tu as corrigé la date à la main ne sont pas touchées.
+ */
+export async function redateSheetSessions(anchorWeek, anchorDate) {
+  const out = [];
+  for (const s of S.sessions) {
+    if (s.source !== 'sheet' || s.week == null || s.dateApprox === false) continue;
+    const t = S.templates.find(x => x.id === s.templateId);
+    const off = t && t.day != null ? (t.day + 6) % 7 : 0;
+    const d = addDays(anchorDate, (s.week - anchorWeek) * 7 + off);
+    if (d !== s.date) { s.date = d; s.updatedAt = Date.now(); out.push(s); }
+  }
+  await putMany('sessions', out);
+  return out.length;
+}
+
 /** Annule un import : supprime uniquement les séances issues de cet import et non modifiées dans l'app. */
 export async function rollbackImport(id) {
   const ss = S.sessions.filter(s => s.importId === id && !s.editedInApp);
@@ -512,7 +530,8 @@ export function analyseWorkbook(wb, opts = {}) {
   for (const n of det.tracking) { const t = parseTrackingGrid(wb.sheets[n]); res.days.push(...t.days); res.warnings.push(...t.warnings); }
   if (res.days.length) trackingFirst = res.days.map(d => d.date).sort()[0];
   for (const n of det.training) {
-    const t = parseTrainingGrid(wb.sheets[n], { anchor: opts.anchor, year: opts.year || (trackingFirst ? +trackingFirst.slice(0, 4) : null) });
+    // repère de date : celui du fichier (vérifié), sinon détecté dans les en-têtes (année la plus récente non future)
+    const t = parseTrainingGrid(wb.sheets[n], { anchor: opts.anchor || wb.anchor || null, year: opts.year || null });
     res.templates.push(...t.templates); res.exercises.push(...t.exercises); res.sessions.push(...t.sessions);
     res.warnings.push(...t.warnings); res.weeks = t.weeks; res.anchor = t.anchor;
   }

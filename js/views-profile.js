@@ -7,7 +7,7 @@ import * as I from './importer.js';
 import { R, VIEWS, rerender, go } from './nav.js';
 import { actions, openSheet, toast, card, kpi, badge, seg, field, inp, sel, formData, confirmDlg, closeAllSheets } from './ui.js';
 
-export const APP_VERSION = '1.0.1';
+export const APP_VERSION = '1.0.2';
 
 VIEWS.profil = () => {
   const p = S.profile;
@@ -31,6 +31,10 @@ VIEWS.profil = () => {
     <button class="btn w100" data-a="openImport">Importer un fichier (.xlsx, .csv, .json)</button>
     ${pending.map(s => `<button class="banner mt-s" data-a="openStaging" data-id="${s.id}">En attente : ${esc(s.fileName || s.source)} — ${s.diff.newSessions} nouvelles séances</button>`).join('')}
     ${done.length ? `<details class="mt-s"><summary class="small">Imports validés (${done.length})</summary>${done.map(s => `<div class="hist-row small"><span>${fdate(dstr(new Date(s.committedAt)))} · ${esc(s.fileName || s.source)}</span><span>${s.result?.sessions || 0} séances<button class="link small" data-a="rollback" data-id="${s.id}">annuler</button></span></div>`).join('')}</details>` : ''}
+    ${S.sessions.some(s => s.source === 'sheet') ? (() => { const last = S.sessions.filter(s => s.source === 'sheet' && s.week != null).sort((a, b) => b.week - a.week || (a.date < b.date ? 1 : -1))[0]; return `<details class="mt-s"><summary class="small">Recaler les dates des séances du Sheets</summary>
+    <p class="small muted">Le Sheets numérote les semaines sans année. Indique le lundi d'une semaine connue : toutes les séances importées sont replacées à leur jour habituel. Actuellement, la semaine ${last.week} (la plus récente) commence le ${fdate(addDays(last.date, -((new Date(last.date + 'T12:00').getDay() + 6) % 7)))}.</p>
+    <form id="redateForm"><div class="grid2">${field('Semaine n°', `<input type="number" name="week" value="${last.week}">`)}${field('commence le lundi', `<input type="date" name="date" value="">`)}</div>
+    <button type="button" class="btn ghost w100" data-a="redate">Recaler les dates</button></form></details>`; })() : ''}
     <details class="mt-s"><summary class="small">Connexion directe à Google Sheets (avancé)</summary>
     <p class="small muted">Lecture seule via l'API Google, uniquement si tu crées un identifiant OAuth (Client ID) dans Google Cloud et autorises l'adresse de l'app. Sans cela, aucune synchronisation automatique n'est possible — utilise l'export .xlsx. Voir <i>docs/GUIDE-IMPORT-GOOGLE-SHEETS.md</i>.</p>
     <form id="gForm">${field('Client ID OAuth', inp('clientId', S.settings.google.clientId))}${field('ID du Google Sheets', inp('spreadsheetId', S.settings.google.spreadsheetId), 'La partie entre /d/ et /edit dans l’URL')}
@@ -171,6 +175,13 @@ function restoreDialog(b) {
 
 actions({
   openImport() { importSheet(); },
+  async redate() {
+    const f = formData(document.getElementById('redateForm')); const w = num(f.week);
+    if (!w || !f.date) { toast('Indique la semaine et la date du lundi'); return; }
+    const d = new Date(f.date + 'T12:00'); if (d.getDay() !== 1 && !await confirmDlg(`Le ${fdate(f.date)} n'est pas un lundi. Continuer quand même ?`)) return;
+    await autoSnapshot('avant recalage des dates');
+    const n = await I.redateSheetSessions(w, f.date); toast(`${n} séance(s) redatée(s)`); rerender();
+  },
   openStaging(el) { const st = S.staging.find(x => x.id === el.dataset.id); if (st) stagingSheet(st); },
   async rollback(el) {
     const st = S.staging.find(x => x.id === el.dataset.id);
