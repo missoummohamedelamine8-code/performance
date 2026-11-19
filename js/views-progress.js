@@ -31,10 +31,7 @@ function muscu(from, to, P) {
   if (!ss.length && all.length) o += `<p class="note small">Aucune séance sur la période. Dernière séance : ${fdate(all[all.length - 1].date)} — élargis la période (6 mois / 1 an).</p>`;
   const weeks = Math.max(1, P / 7);
   o += card(`<div class="kpis">${kpi('Séances', ss.length, f1(ss.length / weeks) + '/sem.')}${kpi('Tonnage', f1(sum(ss.map(C.sessionTonnage)) / 1000) + ' t')}${kpi('Séries', f0(sum(ss.map(C.sessionSetsCount))))}${kpi('Records', C.recentPRs(P).length, 'sur la période')}</div>`);
-  const pts = [];
-  if (P <= 31) for (const s of ss) pts.push({ date: s.date, v: C.sessionTonnage(s), note: s.name });
-  else { let m = mondayOf(from); while (m <= to) { const e = addDays(m, 6); const w = ss.filter(s => s.date >= m && s.date <= e); pts.push({ date: m, v: sum(w.map(C.sessionTonnage)), note: w.length + ' séance(s)' }); m = addDays(m, 7); } }
-  o += card(`<h3>Tonnage ${P <= 31 ? 'par séance' : 'par semaine'}</h3>${barChart(pts, { color: 'var(--green)', unit: 'kg', axisFmt: v => v >= 1000 ? (v / 1000) + 't' : v })}`);
+  o += tonnageBySession(from, to);
   const mv = C.muscleVolume(from, to);
   o += card(`<h3>Volume et fréquence par groupe</h3><table class="tbl"><tr><th>Groupe</th><th>Séries/sem.</th><th>Fréq.</th><th>Tonnage</th></tr>${C.GROUPS.map(g => `<tr><td>${g}</td><td>${f1(mv[g].perWeek)}</td><td>${f1(mv[g].freq)}/sem</td><td>${f0(mv[g].tonnage)}</td></tr>`).join('')}</table>`);
   // records et 1RM
@@ -44,6 +41,56 @@ function muscu(from, to, P) {
   const top = ex.slice(0, 4);
   if (top.length) o += card(`<h3>Évolution des charges (principaux exercices)</h3>${lineChart(top.map((x, i) => ({ name: x.e.name, color: ['var(--green)', 'var(--accent)', '#6fdc8c', '#c7f08a'][i], points: x.st.history.filter(h => h.date >= from && h.topLoad).map(h => ({ date: h.date, v: h.topLoad })) })).filter(s => s.points.length), { unit: 'kg' })}`);
   if (top.length) o += card(`<h3>Évolution des répétitions</h3>${lineChart(top.map((x, i) => ({ name: x.e.name, color: ['var(--green)', 'var(--accent)', '#6fdc8c', '#c7f08a'][i], points: x.st.history.filter(h => h.date >= from).map(h => ({ date: h.date, v: h.reps })) })).filter(s => s.points.length), { fmt: f0 })}`);
+  return o;
+}
+
+// ---------------------------------------------------------------------
+// Tonnage par séance : chaque type de séance (Pecs/Bras, Dos/Épaules…)
+// n'est comparé qu'avec lui-même, semaine après semaine.
+// ---------------------------------------------------------------------
+const sessKey = s => s.templateId || 'nom:' + s.name;
+function sessionTypes() {
+  const by = new Map();
+  for (const s of C.doneSessions()) {
+    const k = sessKey(s); const t = S.templates.find(x => x.id === s.templateId);
+    if (!by.has(k)) by.set(k, { key: k, name: t?.name || s.name, day: t?.day, list: [] });
+    by.get(k).list.push(s);
+  }
+  return [...by.values()].sort((a, b) => ((a.day ?? 9) + 6) % 7 - ((b.day ?? 9) + 6) % 7 || a.name.localeCompare(b.name));
+}
+const pctTxt = (a, b) => (b ? `${a >= b ? '+' : ''}${f1((a / b - 1) * 100)} %` : '—');
+const deltaTxt = (a, b) => `${a - b >= 0 ? '+' : '−'}${f0(Math.abs(a - b))} kg`;
+const deltaCls = (a, b) => a > b * 1.02 ? 'c-green' : a < b * 0.98 ? 'c-red' : 'muted';
+
+function tonnageBySession(from, to) {
+  const types = sessionTypes().filter(t => t.list.length);
+  if (!types.length) return card('<h2>Tonnage par séance</h2><p class="muted">Aucune séance enregistrée.</p>');
+  if (!R.filters.progTpl || !types.some(t => t.key === R.filters.progTpl)) {
+    const lastS = C.doneSessions().slice(-1)[0]; R.filters.progTpl = sessKey(lastS);
+  }
+  const cur = types.find(t => t.key === R.filters.progTpl);
+  let list = cur.list.filter(s => s.date >= from && s.date <= to);
+  let note = '';
+  if (list.length < 2) { list = cur.list; note = `<p class="muted small">Moins de 2 séances « ${esc(cur.name)} » sur la période choisie : tout l'historique est affiché.</p>`; }
+  const rows = list.map(s => ({ s, wk: C.programWeek(s.date), t: C.sessionTonnage(s), n: C.sessionSetsCount(s) }));
+  const last = rows[rows.length - 1], prev = rows[rows.length - 2];
+  const best = rows.reduce((a, b) => b.t > a.t ? b : a);
+  const avgT = avg(rows.map(r => r.t));
+  const pts = rows.map((r, i) => ({ label: r.wk != null ? 'S' + r.wk : fdate(r.s.date), v: r.t, note: `${fdate(r.s.date)} · ${r.n} séries`, color: i === rows.length - 1 ? 'var(--accent)' : 'var(--green)' }));
+  let o = `<section class="card"><h2 class="sec-title">Tonnage par séance</h2>
+    <p class="muted small">Chaque séance est comparée à elle-même d'une semaine à l'autre (charge × répétitions, toutes séries).</p>
+    <div class="chips scroll mt-s">${types.map(t => `<button class="chip ${t.key === cur.key ? 'on' : ''}" data-a="progTpl" data-k="${esc(t.key)}">${esc(t.name)} <small>${t.list.length}</small></button>`).join('')}</div>
+    <h3 class="mt">${esc(cur.name)}</h3>${note}
+    <div class="kpis">${kpi('Dernière', f0(last.t) + ' kg', (last.wk != null ? 'semaine ' + last.wk + ' · ' : '') + fdate(last.s.date))}
+    ${kpi('vs séance précédente', prev ? `<i class="nb ${deltaCls(last.t, prev.t)}">${deltaTxt(last.t, prev.t)}</i>` : '—', prev ? pctTxt(last.t, prev.t) + (prev.wk != null ? ' vs semaine ' + prev.wk : '') : 'première séance')}
+    ${kpi('Record', f0(best.t) + ' kg', best.wk != null ? 'semaine ' + best.wk : fdate(best.s.date))}${kpi('Moyenne', f0(avgT) + ' kg', rows.length + ' séances')}</div>
+    ${barChart(pts, { unit: 'kg', axisFmt: v => v >= 1000 ? (v / 1000) + 't' : v })}
+    <table class="tbl mt-s"><tr><th>Semaine</th><th>Date</th><th>Tonnage</th><th>Évolution</th></tr>
+    ${[...rows].reverse().map((r, i, arr) => { const p = arr[i + 1]; return `<tr class="click" data-a="openSession" data-id="${r.s.id}"><td>${r.wk != null ? 'S' + r.wk : '—'}</td><td>${fdate(r.s.date)}</td><td><b>${f0(r.t)}</b></td><td class="${p ? deltaCls(r.t, p.t) : 'muted'}">${p ? deltaTxt(r.t, p.t) + ' · ' + pctTxt(r.t, p.t) : '—'}</td></tr>`; }).join('')}</table>
+    <p class="muted small">Un tonnage qui baisse n'est pas forcément une régression : moins de séries, un exercice remplacé ou une charge plus lourde avec moins de reps changent aussi le total.</p></section>`;
+  // vue d'ensemble : dernière évolution de chaque séance, comparée à sa propre séance précédente
+  o += card(`<h3>Dernière évolution de chaque séance</h3><table class="tbl"><tr><th>Séance</th><th>Dernière</th><th>vs précédente</th></tr>
+    ${types.map(t => { const a = t.list[t.list.length - 1], b = t.list[t.list.length - 2]; const ta = C.sessionTonnage(a), tb = b ? C.sessionTonnage(b) : null; return `<tr class="click" data-a="progTpl" data-k="${esc(t.key)}"><td>${esc(t.name)}<small class="d-block muted">${fdate(a.date)}</small></td><td><b>${f0(ta)} kg</b></td><td class="${b ? deltaCls(ta, tb) : 'muted'}">${b ? deltaTxt(ta, tb) + '<small class="d-block">' + pctTxt(ta, tb) + '</small>' : '—'}</td></tr>`; }).join('')}</table>`);
   return o;
 }
 
@@ -116,6 +163,7 @@ function nutrition(from, to) {
 
 actions({
   period(el) { R.period = +el.dataset.v; rerender(); },
+  progTpl(el) { R.filters.progTpl = el.dataset.k; const y = scrollY; rerender(); window.scrollTo(0, y); },
   addMeasures() {
     const s = openSheet({ title: 'Mensurations (cm)', body: `<form>${field('Date', `<input type="date" name="date" value="${todayStr()}">`)}<div class="grid2">${['Bras', 'Avant-bras', 'Poitrine', 'Taille', 'Hanches', 'Cuisse', 'Mollet', 'Cou'].map(k => field(k, `<input type="number" step="0.5" name="${k}">`)).join('')}</div><button type="button" class="btn w100" data-ok>Enregistrer</button></form>` });
     s.body.querySelector('[data-ok]').onclick = async () => { const f = formData(s.body); const m = {}; for (const [k, v] of Object.entries(f)) if (k !== 'date' && num(v)) m[k] = num(v); if (!Object.keys(m).length) return; await patchDay(f.date, { measures: m, waist: m.Taille ?? S.days[f.date]?.waist }); s.close(); rerender(); };

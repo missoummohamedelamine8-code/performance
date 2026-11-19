@@ -7,7 +7,7 @@ import * as I from './importer.js';
 import { R, VIEWS, rerender, go } from './nav.js';
 import { actions, openSheet, toast, card, kpi, badge, seg, field, inp, sel, formData, confirmDlg, closeAllSheets } from './ui.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 VIEWS.profil = () => {
   const p = S.profile;

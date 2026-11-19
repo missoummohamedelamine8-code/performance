@@ -255,3 +255,6 @@ ol, ul { padding-left: 20px; }
 .card.week .list-i { margin: 8px 0 0; }
 .wk-todo { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; margin: 8px 0 0; border: 1px dashed var(--line); border-radius: var(--r-s); font-size: 14px; color: var(--muted); }
 .wk-todo.todo { color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.sec-title { font-size: 24px; letter-spacing: -.02em; margin-bottom: 4px; }
+.chip small { opacity: .65; margin-left: 2px; }
+.kpi b i.nb { font-style: normal; }
